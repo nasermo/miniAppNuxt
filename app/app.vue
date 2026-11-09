@@ -13,6 +13,8 @@
   <NuxtLink to="/cart">Cart</NuxtLink>
   |
   <NuxtLink to="/about">About</NuxtLink>
+  |
+  <NuxtLink to="/help">Help</NuxtLink>
 </div>
 <hr>
 <NuxtPage/>
