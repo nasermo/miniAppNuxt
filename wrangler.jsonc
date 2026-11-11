@@ -1,9 +1,12 @@
 {
-    "d1_databases":[
-        {
+  "name": "yadno-reminders",
+  "compatibility_date": "2025-07-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
       "database_name": "mini-app-nuxt-db",
       "database_id": "7bc33221-1980-452d-ad77-a241fc5af745",
       "binding": "db_link"
-        }
-    ]
+    }
+  ]
 }

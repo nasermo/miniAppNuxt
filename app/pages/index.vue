@@ -21,7 +21,10 @@ const { data: reminders, pending, error, refresh } = await useFetch<Reminder[]>(
 
 const isDialogOpen = ref(false)
 const editingId = ref<string | null>(null)
+const activeTab = ref<'overview' | 'tasks'>('overview')
 const activeFilter = ref<TaskStatus | 'all'>('all')
+const activeSlide = ref(0)
+const taskSlider = ref<HTMLElement | null>(null)
 const saving = ref(false)
 const deletingId = ref<string | null>(null)
 const notice = ref('')
@@ -44,6 +47,29 @@ const completedCount = computed(() => allReminders.value.filter((task) => task.s
 const activeCount = computed(() => allReminders.value.filter((task) => task.status !== 'done').length)
 const dueSoonCount = computed(() => allReminders.value.filter((task) => task.status !== 'done' && new Date(task.due_at).getTime() >= currentTime.value && new Date(task.due_at).getTime() <= currentTime.value + 24 * 60 * 60 * 1000).length)
 const progress = computed(() => allReminders.value.length ? Math.round((completedCount.value / allReminders.value.length) * 100) : 0)
+
+function updateActiveSlide() {
+    const slider = taskSlider.value
+    if (!slider) return
+
+    const sliderCenter = slider.getBoundingClientRect().left + slider.clientWidth / 2
+    const slides = Array.from(slider.children)
+    activeSlide.value = slides.reduce((closestIndex, slide, index) => {
+        const bounds = slide.getBoundingClientRect()
+        const distance = Math.abs(bounds.left + bounds.width / 2 - sliderCenter)
+        const closestBounds = slides[closestIndex].getBoundingClientRect()
+        const closestDistance = Math.abs(closestBounds.left + closestBounds.width / 2 - sliderCenter)
+        return distance < closestDistance ? index : closestIndex
+    }, 0)
+}
+
+function goToSlide(index: number) {
+    taskSlider.value?.children[index]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+    })
+}
 
 function tasksFor(status: TaskStatus) {
     return allReminders.value
@@ -146,13 +172,13 @@ async function removeReminder(task: Reminder) {
 </script>
 
 <template>
-    <main class="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-[#10142b] to-[#1b1028] text-slate-100" dir="rtl">
+    <main class="relative h-[100dvh] overflow-hidden bg-gradient-to-br from-slate-950 via-[#10142b] to-[#1b1028] text-slate-100" dir="rtl">
         <div class="pointer-events-none absolute -left-40 top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-[120px]" />
-        <div class="pointer-events-none absolute -right-32 top-[38rem] h-96 w-96 rounded-full bg-purple-600/20 blur-[130px]" />
+        <div class="pointer-events-none absolute -right-32 top-1/2 h-96 w-96 rounded-full bg-purple-600/20 blur-[130px]" />
         <div class="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-rose-600/10 blur-[120px]" />
 
-        <div class="relative mx-auto w-[calc(100%-2rem)] max-w-6xl sm:w-[calc(100%-3rem)]">
-            <header class="flex h-[4.5rem] items-center justify-between border-b border-white/10">
+        <div class="relative mx-auto flex h-full w-[calc(100%-2rem)] max-w-6xl flex-col overflow-hidden pt-[env(safe-area-inset-top)] sm:w-[calc(100%-3rem)]">
+            <header class="flex h-14 shrink-0 items-center justify-between border-b border-white/10 sm:h-16">
                 <a class="flex items-center gap-3 text-white" href="/" aria-label="خانه یادآور">
                     <span class="grid h-10 w-10 rotate-[-8deg] place-items-center rounded-xl border border-blue-300/30 bg-gradient-to-br from-blue-400/20 to-purple-500/20 shadow-lg shadow-blue-950/30">
                         <span class="h-3 w-3 rounded-sm bg-gradient-to-br from-blue-300 to-purple-300 shadow-[0_0_16px_rgba(167,139,250,0.8)]" />
@@ -165,40 +191,55 @@ async function removeReminder(task: Reminder) {
                 </div>
             </header>
 
-            <section class="flex flex-col items-start justify-between gap-6 py-10 sm:flex-row sm:items-end sm:py-14">
+            <nav class="flex shrink-0 gap-2 border-b border-white/10 py-2" aria-label="بخش‌های برنامه">
+                <button class="rounded-xl px-4 py-2 text-xs font-medium transition sm:text-sm" :class="activeTab === 'overview' ? 'bg-blue-400/15 text-blue-100' : 'text-slate-400 hover:bg-white/5 hover:text-white'" :aria-current="activeTab === 'overview' ? 'page' : undefined" @click="activeTab = 'overview'">نمای کلی</button>
+                <button class="rounded-xl px-4 py-2 text-xs font-medium transition sm:text-sm" :class="activeTab === 'tasks' ? 'bg-violet-400/15 text-violet-100' : 'text-slate-400 hover:bg-white/5 hover:text-white'" :aria-current="activeTab === 'tasks' ? 'page' : undefined" @click="activeTab = 'tasks'">مدیریت زمان <span class="mr-1 text-[10px] text-slate-400">{{ allReminders.length.toLocaleString('fa-IR') }}</span></button>
+            </nav>
+
+            <div class="min-h-0 flex-1 overflow-hidden">
+            <section v-if="activeTab === 'overview'" class="flex h-full flex-col overflow-hidden py-5 sm:py-7">
+            <div class="flex flex-col items-start justify-between gap-4 pb-5 sm:flex-row sm:items-end sm:pb-7">
                 <div>
-                    <p class="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide text-blue-200"><span class="h-px w-6 bg-gradient-to-l from-blue-400 to-purple-400" /> پنل یادآوری هوشمند</p>
-                    <h1 class="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">کارهای مهمت،<br class="sm:hidden"> <span class="bg-gradient-to-l from-blue-300 via-purple-300 to-rose-300 bg-clip-text text-transparent">روی ریل.</span></h1>
-                    <p class="mt-3 text-sm text-slate-400 sm:text-base">ذهنت رو آزاد کن؛ کار بعدی رو به ما بسپار.</p>
+                    <p class="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-blue-200"><span class="h-px w-6 bg-gradient-to-l from-blue-400 to-purple-400" /> پنل یادآوری هوشمند</p>
+                    <h1 class="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">کارهای مهمت، <span class="bg-gradient-to-l from-blue-300 via-purple-300 to-rose-300 bg-clip-text text-transparent">روی ریل.</span></h1>
+                    <p class="mt-2 text-xs text-slate-400 sm:text-sm">ذهنت رو آزاد کن؛ کار بعدی رو به ما بسپار.</p>
                 </div>
-                <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-blue-500 to-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/50 transition hover:-translate-y-0.5 hover:from-blue-400 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-300/60" @click="openCreate">
+                <button class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-l from-blue-500 to-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-950/50 transition hover:from-blue-400 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-300/60 sm:text-sm" @click="openCreate">
                     <span class="text-xl leading-none">+</span>
                     <span>یادآور جدید</span>
                 </button>
-            </section>
+            </div>
 
-            <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="خلاصه کارها">
-                <article class="rounded-2xl border border-blue-300/15 bg-gradient-to-br from-blue-500/15 to-indigo-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
+            <section class="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-3" aria-label="خلاصه کارها">
+                <article class="rounded-2xl border border-blue-300/15 bg-gradient-to-br from-blue-500/15 to-indigo-500/5 p-4 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
                     <div class="flex items-center justify-between text-sm text-slate-300"><span>کارهای باز</span><span class="text-lg text-blue-300">◷</span></div>
-                    <div class="mt-3 text-3xl font-bold text-white">{{ activeCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
-                    <div class="mt-3 flex items-center gap-2 text-xs text-slate-400"><span class="h-1.5 w-1.5 rounded-full bg-rose-400" /> {{ dueSoonCount.toLocaleString('fa-IR') }} تا برای ۲۴ ساعت آینده</div>
+                    <div class="mt-2 text-2xl font-bold text-white">{{ activeCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
+                    <div class="mt-2 flex items-center gap-2 text-[10px] text-slate-400 sm:text-xs"><span class="h-1.5 w-1.5 rounded-full bg-rose-400" /> {{ dueSoonCount.toLocaleString('fa-IR') }} تا برای ۲۴ ساعت آینده</div>
                 </article>
-                <article class="rounded-2xl border border-purple-300/15 bg-gradient-to-br from-purple-500/15 to-fuchsia-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
+                <article class="rounded-2xl border border-purple-300/15 bg-gradient-to-br from-purple-500/15 to-fuchsia-500/5 p-4 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
                     <div class="flex items-center justify-between text-sm text-slate-300"><span>به پایان رسیده</span><span class="text-lg text-purple-300">✓</span></div>
-                    <div class="mt-3 text-3xl font-bold text-white">{{ completedCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
-                    <div class="mt-3 text-xs text-slate-400">قدم‌به‌قدم رو به جلو ✨</div>
+                    <div class="mt-2 text-2xl font-bold text-white">{{ completedCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
+                    <div class="mt-2 text-[10px] text-slate-400 sm:text-xs">قدم‌به‌قدم رو به جلو ✨</div>
                 </article>
-                <article class="rounded-2xl border border-rose-300/15 bg-gradient-to-br from-rose-500/10 to-purple-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl sm:col-span-2 lg:col-span-1">
+                <article class="col-span-2 rounded-2xl border border-rose-300/15 bg-gradient-to-br from-rose-500/10 to-purple-500/5 p-4 shadow-xl shadow-slate-950/10 backdrop-blur-xl lg:col-span-1">
                     <div class="flex items-center justify-between text-sm text-slate-300"><span>پیشرفت کلی</span><span class="text-lg text-rose-300">↗</span></div>
-                    <div class="mt-5 flex items-center gap-4">
+                    <div class="mt-3 flex items-center gap-4">
                         <progress class="h-2 w-full overflow-hidden rounded-full accent-violet-400" :value="progress" max="100" :aria-label="`پیشرفت ${progress} درصد`" />
                         <span class="min-w-12 text-left text-xl font-bold text-white">{{ progress.toLocaleString('fa-IR') }}٪</span>
                     </div>
-                    <p class="mt-3 text-xs text-slate-400">هر قدم کوچیک مهمه</p>
+                    <p class="mt-2 text-[10px] text-slate-400 sm:text-xs">هر قدم کوچیک مهمه</p>
                 </article>
             </section>
 
-            <section class="mt-10 sm:mt-12">
+            <div v-if="notice || error" class="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-xs text-rose-200" role="alert">{{ notice || 'دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.' }}</div>
+            <button class="mt-5 flex w-full items-center justify-between rounded-2xl border border-violet-300/15 bg-violet-400/[0.06] p-4 text-right transition hover:border-violet-300/30 hover:bg-violet-400/10" @click="activeTab = 'tasks'">
+                <span><span class="block text-sm font-semibold text-slate-100">تابلوی کارها</span><span class="mt-1 block text-xs text-slate-400">یادآورها را بر اساس وضعیت مدیریت کن</span></span>
+                <span class="text-lg text-violet-200">←</span>
+            </button>
+            <footer class="mt-auto pt-5 text-center text-[10px] text-slate-500"><span class="text-violet-300">✳</span> با تمرکز روی کار بعدی، به هرچیزی می‌رسی.</footer>
+            </section>
+
+            <section v-else class="flex h-full min-h-0 flex-col py-3 sm:py-5">
                 <div class="mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
                     <div>
                         <p class="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> مدیریت زمان</p>
@@ -208,14 +249,15 @@ async function removeReminder(task: Reminder) {
                         <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'all' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'all'">همه</button>
                         <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'todo' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'todo'">در انتظار</button>
                         <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'in_progress' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'in_progress'">در حال انجام</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'done' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'done'">انجام شده</button>
                     </div>
                 </div>
 
-                <p v-if="notice" class="mb-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200" role="alert">{{ notice }}</p>
-                <p v-if="error" class="mb-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200" role="alert">دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.</p>
+                <p v-if="notice || error" class="mb-3 shrink-0 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-2 text-xs text-rose-200" role="alert">{{ notice || 'دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.' }}</p>
 
-                <div class="grid grid-cols-1 items-start gap-3 md:grid-cols-3" aria-label="دسته‌بندی یادآورها">
-                    <article v-for="column in columns" :key="column.id" class="min-h-60 rounded-2xl border p-3 backdrop-blur-xl" :class="column.id === 'todo' ? 'border-blue-300/15 bg-blue-400/[0.035]' : column.id === 'in_progress' ? 'border-purple-300/15 bg-purple-400/[0.035]' : 'border-rose-300/15 bg-rose-400/[0.035]'">
+                <div class="flex min-h-0 flex-1 flex-col">
+                <div ref="taskSlider" class="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:overflow-hidden" aria-label="دسته‌بندی یادآورها" @scroll.passive="updateActiveSlide">
+                    <article v-for="column in columns" :key="column.id" class="flex h-full w-full shrink-0 snap-center flex-col overflow-hidden rounded-2xl border p-3 backdrop-blur-xl md:w-auto" :class="column.id === 'todo' ? 'border-blue-300/15 bg-blue-400/[0.035]' : column.id === 'in_progress' ? 'border-purple-300/15 bg-purple-400/[0.035]' : 'border-rose-300/15 bg-rose-400/[0.035]'">
                         <header class="flex items-center justify-between border-b border-white/[0.08] px-1 pb-3">
                             <div class="flex items-center gap-2">
                                 <span class="text-base text-violet-300">{{ column.icon }}</span>
@@ -224,7 +266,7 @@ async function removeReminder(task: Reminder) {
                             </div>
                             <span class="font-sans text-[9px] tracking-widest text-slate-500">{{ column.english }}</span>
                         </header>
-                        <div class="grid gap-2.5 pt-3">
+                        <div class="grid min-h-0 flex-1 content-start gap-2.5 overflow-y-auto overscroll-contain pt-3">
                             <div v-if="pending" class="rounded-xl border border-white/10 bg-white/[0.04] p-5 text-center text-xs text-slate-400">در حال دریافت کارها...</div>
                             <article v-for="task in tasksFor(column.id)" :key="task.id" class="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.025] p-3.5 shadow-lg shadow-slate-950/10 transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/25 hover:shadow-violet-950/20">
                                 <div class="flex items-center justify-between">
@@ -251,7 +293,7 @@ async function removeReminder(task: Reminder) {
                                     <button v-else class="rounded-md border border-purple-300/15 bg-purple-400/10 px-2 py-1 text-[10px] text-purple-200 transition hover:bg-purple-400/20" @click="changeStatus(task, 'todo')">بازگردانی</button>
                                 </div>
                             </article>
-                            <div v-if="!pending && tasksFor(column.id).length === 0" class="flex min-h-40 flex-col items-center justify-center text-center text-slate-500">
+                            <div v-if="!pending && tasksFor(column.id).length === 0" class="flex min-h-32 flex-col items-center justify-center text-center text-slate-500">
                                 <span class="text-xl text-slate-400">{{ column.icon }}</span>
                                 <p class="mt-2 text-xs">{{ column.id === 'todo' ? 'فعلاً کاری در صف نیست' : column.id === 'in_progress' ? 'هنوز کاری شروع نشده' : 'اولین کارت موفقیتت اینجا میاد' }}</p>
                                 <button v-if="column.id === 'todo' && allReminders.length === 0" class="mt-3 text-xs text-blue-200 transition hover:text-purple-200" @click="openCreate">اولین یادآور رو بساز <span class="text-sm">←</span></button>
@@ -259,9 +301,12 @@ async function removeReminder(task: Reminder) {
                         </div>
                     </article>
                 </div>
+                <div class="flex shrink-0 items-center justify-center gap-2.5 py-3 md:hidden" role="group" aria-label="انتخاب ستون کارها">
+                    <button v-for="(column, index) in columns" :key="column.id" class="h-2 rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-300/60" :class="activeSlide === index ? 'w-5 bg-violet-300' : 'w-2 bg-slate-500/60 hover:bg-slate-300/80'" :aria-label="`نمایش ستون ${column.title}`" :aria-current="activeSlide === index ? 'true' : undefined" @click="goToSlide(index)" />
+                </div>
+                </div>
             </section>
-
-            <footer class="my-8 flex items-center justify-center gap-2 text-center text-xs text-slate-500"><span class="text-violet-300">✳</span> با تمرکز روی کار بعدی، به هرچیزی می‌رسی.</footer>
+            </div>
         </div>
 
         <Transition

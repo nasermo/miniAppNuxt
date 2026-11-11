@@ -11,9 +11,16 @@ npm run dev
 
 در توسعه، داده‌ها در دیتابیس SQLite محلی ذخیره می‌شوند. جدول یادآورها با اولین درخواست API به‌صورت خودکار ساخته می‌شود.
 
-## استقرار
+## استقرار روی Cloudflare Workers
 
-تنظیمات فعلی برای محیط توسعه از SQLite و در محیط production از Cloudflare D1 استفاده می‌کند. در Cloudflare، یک D1 Database با binding به نام `db_link` تعریف کنید؛ جدول نیز هنگام اولین درخواست ساخته می‌شود.
+برای توسعه از `npm run dev` استفاده کنید؛ این حالت SQLite محلی را به‌کار می‌برد. ساخت production با preset مربوط به Cloudflare Workers انجام می‌شود:
+
+```bash
+npm run build
+npx wrangler deploy .output/server/index.mjs --assets .output/public
+```
+
+تنظیم D1 در `wrangler.jsonc` باید به همان پایگاه داده با binding به نام `db_link` اشاره کند. دستور deploy فایل Worker و دارایی‌های build را همراه همین binding منتشر می‌کند؛ جدول یادآورها نیز در اولین درخواست API ساخته می‌شود.
 
 ## API
 
