@@ -1,5 +1,299 @@
+<script setup lang="ts">
+type TaskStatus = 'todo' | 'in_progress' | 'done'
+
+interface Reminder {
+    id: string
+    title: string
+    description: string
+    due_at: string
+    status: TaskStatus
+}
+
+const columns: { id: TaskStatus; title: string; english: string; icon: string }[] = [
+    { id: 'todo', title: 'باید انجام بشه', english: 'UP NEXT', icon: '○' },
+    { id: 'in_progress', title: 'در حال انجام', english: 'IN MOTION', icon: '◉' },
+    { id: 'done', title: 'انجام شده', english: 'COMPLETED', icon: '✓' },
+]
+
+const { data: reminders, pending, error, refresh } = await useFetch<Reminder[]>('/api/tasks', {
+    default: () => [],
+})
+
+const isDialogOpen = ref(false)
+const editingId = ref<string | null>(null)
+const activeFilter = ref<TaskStatus | 'all'>('all')
+const saving = ref(false)
+const deletingId = ref<string | null>(null)
+const notice = ref('')
+const currentTime = ref(Date.now())
+const form = reactive({ title: '', description: '', dueAt: '', status: 'todo' as TaskStatus })
+let clockInterval: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+    clockInterval = setInterval(() => {
+        currentTime.value = Date.now()
+    }, 60_000)
+})
+
+onBeforeUnmount(() => {
+    if (clockInterval) clearInterval(clockInterval)
+})
+
+const allReminders = computed(() => reminders.value ?? [])
+const completedCount = computed(() => allReminders.value.filter((task) => task.status === 'done').length)
+const activeCount = computed(() => allReminders.value.filter((task) => task.status !== 'done').length)
+const dueSoonCount = computed(() => allReminders.value.filter((task) => task.status !== 'done' && new Date(task.due_at).getTime() >= currentTime.value && new Date(task.due_at).getTime() <= currentTime.value + 24 * 60 * 60 * 1000).length)
+const progress = computed(() => allReminders.value.length ? Math.round((completedCount.value / allReminders.value.length) * 100) : 0)
+
+function tasksFor(status: TaskStatus) {
+    return allReminders.value
+        .filter((task) => task.status === status && (activeFilter.value === 'all' || activeFilter.value === status))
+        .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+}
+
+function openCreate() {
+    editingId.value = null
+    Object.assign(form, { title: '', description: '', dueAt: defaultDueDate(), status: 'todo' })
+    isDialogOpen.value = true
+}
+
+function openEdit(task: Reminder) {
+    editingId.value = task.id
+    Object.assign(form, {
+        title: task.title,
+        description: task.description,
+        dueAt: toLocalDateTime(task.due_at),
+        status: task.status,
+    })
+    isDialogOpen.value = true
+}
+
+function defaultDueDate() {
+    const date = new Date(Date.now() + 60 * 60 * 1000)
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+    return date.toISOString().slice(0, 16)
+}
+
+function toLocalDateTime(value: string) {
+    const date = new Date(value)
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+    return date.toISOString().slice(0, 16)
+}
+
+function formatDue(value: string) {
+    return new Intl.DateTimeFormat('fa-IR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+}
+
+function countdown(value: string, status: TaskStatus) {
+    if (status === 'done') return 'به پایان رسیده'
+    const delta = new Date(value).getTime() - currentTime.value
+    const absolute = Math.abs(delta)
+    const days = Math.floor(absolute / 86_400_000)
+    const hours = Math.floor((absolute % 86_400_000) / 3_600_000)
+    const minutes = Math.floor((absolute % 3_600_000) / 60_000)
+    const remaining = days ? `${days} روز و ${hours} ساعت` : hours ? `${hours} ساعت و ${minutes} دقیقه` : `${Math.max(minutes, 1)} دقیقه`
+    return delta < 0 ? `${remaining} تأخیر` : `${remaining} مانده`
+}
+
+async function saveReminder() {
+    if (!form.title.trim() || !form.dueAt) return
+    saving.value = true
+    notice.value = ''
+    try {
+        const payload = {
+            title: form.title.trim(),
+            description: form.description.trim(),
+            dueAt: new Date(form.dueAt).toISOString(),
+            status: form.status,
+        }
+        await $fetch(editingId.value ? `/api/tasks/${editingId.value}` : '/api/tasks', {
+            method: editingId.value ? 'PUT' : 'POST',
+            body: payload,
+        })
+        isDialogOpen.value = false
+        await refresh()
+    } catch {
+        notice.value = 'ذخیره یادآور انجام نشد. دوباره تلاش کن.'
+    } finally {
+        saving.value = false
+    }
+}
+
+async function changeStatus(task: Reminder, status: TaskStatus) {
+    try {
+        await $fetch(`/api/tasks/${task.id}`, {
+            method: 'PUT',
+            body: { title: task.title, description: task.description, dueAt: task.due_at, status },
+        })
+        await refresh()
+    } catch {
+        notice.value = 'تغییر وضعیت ذخیره نشد. دوباره تلاش کن.'
+    }
+}
+
+async function removeReminder(task: Reminder) {
+    if (!window.confirm(`یادآور «${task.title}» حذف شود؟`)) return
+    deletingId.value = task.id
+    try {
+        await $fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
+        await refresh()
+    } catch {
+        notice.value = 'حذف یادآور انجام نشد. دوباره تلاش کن.'
+    } finally {
+        deletingId.value = null
+    }
+}
+</script>
+
 <template>
-<div>
-    main page
-</div>
+    <main class="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-[#10142b] to-[#1b1028] text-slate-100" dir="rtl">
+        <div class="pointer-events-none absolute -left-40 top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-[120px]" />
+        <div class="pointer-events-none absolute -right-32 top-[38rem] h-96 w-96 rounded-full bg-purple-600/20 blur-[130px]" />
+        <div class="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-rose-600/10 blur-[120px]" />
+
+        <div class="relative mx-auto w-[calc(100%-2rem)] max-w-6xl sm:w-[calc(100%-3rem)]">
+            <header class="flex h-[4.5rem] items-center justify-between border-b border-white/10">
+                <a class="flex items-center gap-3 text-white" href="/" aria-label="خانه یادآور">
+                    <span class="grid h-10 w-10 rotate-[-8deg] place-items-center rounded-xl border border-blue-300/30 bg-gradient-to-br from-blue-400/20 to-purple-500/20 shadow-lg shadow-blue-950/30">
+                        <span class="h-3 w-3 rounded-sm bg-gradient-to-br from-blue-300 to-purple-300 shadow-[0_0_16px_rgba(167,139,250,0.8)]" />
+                    </span>
+                    <span class="text-xl font-extrabold tracking-tight">یاد<span class="text-violet-300">نو</span></span>
+                </a>
+                <div class="flex items-center gap-3 sm:gap-5">
+                    <span class="flex items-center gap-2 text-xs text-slate-300 sm:text-sm"><span class="h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.9)]" /> فضای شخصی تو</span>
+                    <button class="grid h-9 w-9 place-items-center rounded-full border border-purple-300/20 bg-purple-400/10 text-sm text-purple-200 transition hover:bg-purple-400/20" aria-label="حساب کاربری">ی</button>
+                </div>
+            </header>
+
+            <section class="flex flex-col items-start justify-between gap-6 py-10 sm:flex-row sm:items-end sm:py-14">
+                <div>
+                    <p class="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide text-blue-200"><span class="h-px w-6 bg-gradient-to-l from-blue-400 to-purple-400" /> پنل یادآوری هوشمند</p>
+                    <h1 class="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">کارهای مهمت،<br class="sm:hidden"> <span class="bg-gradient-to-l from-blue-300 via-purple-300 to-rose-300 bg-clip-text text-transparent">روی ریل.</span></h1>
+                    <p class="mt-3 text-sm text-slate-400 sm:text-base">ذهنت رو آزاد کن؛ کار بعدی رو به ما بسپار.</p>
+                </div>
+                <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-blue-500 to-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/50 transition hover:-translate-y-0.5 hover:from-blue-400 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-300/60" @click="openCreate">
+                    <span class="text-xl leading-none">+</span>
+                    <span>یادآور جدید</span>
+                </button>
+            </section>
+
+            <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="خلاصه کارها">
+                <article class="rounded-2xl border border-blue-300/15 bg-gradient-to-br from-blue-500/15 to-indigo-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
+                    <div class="flex items-center justify-between text-sm text-slate-300"><span>کارهای باز</span><span class="text-lg text-blue-300">◷</span></div>
+                    <div class="mt-3 text-3xl font-bold text-white">{{ activeCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
+                    <div class="mt-3 flex items-center gap-2 text-xs text-slate-400"><span class="h-1.5 w-1.5 rounded-full bg-rose-400" /> {{ dueSoonCount.toLocaleString('fa-IR') }} تا برای ۲۴ ساعت آینده</div>
+                </article>
+                <article class="rounded-2xl border border-purple-300/15 bg-gradient-to-br from-purple-500/15 to-fuchsia-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl">
+                    <div class="flex items-center justify-between text-sm text-slate-300"><span>به پایان رسیده</span><span class="text-lg text-purple-300">✓</span></div>
+                    <div class="mt-3 text-3xl font-bold text-white">{{ completedCount.toLocaleString('fa-IR') }}<small class="mr-1 text-sm font-normal text-slate-400">کار</small></div>
+                    <div class="mt-3 text-xs text-slate-400">قدم‌به‌قدم رو به جلو ✨</div>
+                </article>
+                <article class="rounded-2xl border border-rose-300/15 bg-gradient-to-br from-rose-500/10 to-purple-500/5 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-xl sm:col-span-2 lg:col-span-1">
+                    <div class="flex items-center justify-between text-sm text-slate-300"><span>پیشرفت کلی</span><span class="text-lg text-rose-300">↗</span></div>
+                    <div class="mt-5 flex items-center gap-4">
+                        <progress class="h-2 w-full overflow-hidden rounded-full accent-violet-400" :value="progress" max="100" :aria-label="`پیشرفت ${progress} درصد`" />
+                        <span class="min-w-12 text-left text-xl font-bold text-white">{{ progress.toLocaleString('fa-IR') }}٪</span>
+                    </div>
+                    <p class="mt-3 text-xs text-slate-400">هر قدم کوچیک مهمه</p>
+                </article>
+            </section>
+
+            <section class="mt-10 sm:mt-12">
+                <div class="mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+                    <div>
+                        <p class="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> مدیریت زمان</p>
+                        <h2 class="text-xl font-bold text-white sm:text-2xl">تابلوی کارها <span class="mr-1 rounded-lg border border-violet-300/15 bg-violet-400/10 px-2 py-1 align-middle text-xs text-violet-200">{{ allReminders.length.toLocaleString('fa-IR') }}</span></h2>
+                    </div>
+                    <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.04] p-1 backdrop-blur-lg" aria-label="فیلتر کارها">
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'all' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'all'">همه</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'todo' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'todo'">در انتظار</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'in_progress' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'in_progress'">در حال انجام</button>
+                    </div>
+                </div>
+
+                <p v-if="notice" class="mb-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200" role="alert">{{ notice }}</p>
+                <p v-if="error" class="mb-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200" role="alert">دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.</p>
+
+                <div class="grid grid-cols-1 items-start gap-3 md:grid-cols-3" aria-label="دسته‌بندی یادآورها">
+                    <article v-for="column in columns" :key="column.id" class="min-h-60 rounded-2xl border p-3 backdrop-blur-xl" :class="column.id === 'todo' ? 'border-blue-300/15 bg-blue-400/[0.035]' : column.id === 'in_progress' ? 'border-purple-300/15 bg-purple-400/[0.035]' : 'border-rose-300/15 bg-rose-400/[0.035]'">
+                        <header class="flex items-center justify-between border-b border-white/[0.08] px-1 pb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-base text-violet-300">{{ column.icon }}</span>
+                                <h3 class="text-xs font-semibold text-slate-200">{{ column.title }}</h3>
+                                <span class="grid h-5 min-w-5 place-items-center rounded-md bg-white/[0.07] px-1 text-[10px] text-slate-300">{{ tasksFor(column.id).length.toLocaleString('fa-IR') }}</span>
+                            </div>
+                            <span class="font-sans text-[9px] tracking-widest text-slate-500">{{ column.english }}</span>
+                        </header>
+                        <div class="grid gap-2.5 pt-3">
+                            <div v-if="pending" class="rounded-xl border border-white/10 bg-white/[0.04] p-5 text-center text-xs text-slate-400">در حال دریافت کارها...</div>
+                            <article v-for="task in tasksFor(column.id)" :key="task.id" class="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.025] p-3.5 shadow-lg shadow-slate-950/10 transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/25 hover:shadow-violet-950/20">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="h-1.5 w-1.5 rounded-full bg-violet-300" /> {{ column.title }}</span>
+                                    <div class="flex gap-1">
+                                        <button class="grid h-7 w-7 place-items-center rounded-lg border border-transparent text-slate-400 transition hover:border-blue-300/20 hover:bg-blue-400/10 hover:text-blue-200" aria-label="ویرایش یادآور" title="ویرایش" @click="openEdit(task)">
+                                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19.2 8a2.8 2.8 0 0 0-4-4L4 15.2 4 20Z" /></svg>
+                                        </button>
+                                        <button class="grid h-7 w-7 place-items-center rounded-lg border border-transparent text-slate-400 transition hover:border-rose-300/20 hover:bg-rose-400/10 hover:text-rose-200 disabled:opacity-50" aria-label="حذف یادآور" title="حذف" :disabled="deletingId === task.id" @click="removeReminder(task)">
+                                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <h4 class="mt-2 text-sm font-semibold leading-relaxed text-slate-100">{{ task.title }}</h4>
+                                <p v-if="task.description" class="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-400">{{ task.description }}</p>
+                                <div class="mt-3 flex items-center gap-2 text-[10px] text-slate-400"><span class="text-blue-300">◷</span><span>{{ formatDue(task.due_at) }}</span></div>
+                                <div class="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.08] pt-2.5">
+                                    <span class="text-[10px]" :class="{ 'text-rose-300': task.status !== 'done' && new Date(task.due_at).getTime() < currentTime, 'text-slate-400': task.status === 'done', 'text-blue-200': task.status !== 'done' && new Date(task.due_at).getTime() >= currentTime }">{{ countdown(task.due_at, task.status) }}</span>
+                                    <select v-if="task.status !== 'done'" class="max-w-24 rounded-md border border-white/10 bg-slate-900/80 px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-violet-300/40" :value="task.status" aria-label="تغییر وضعیت" @change="changeStatus(task, ($event.target as HTMLSelectElement).value as TaskStatus)">
+                                        <option value="todo">در انتظار</option>
+                                        <option value="in_progress">شروع کار</option>
+                                        <option value="done">انجام شد</option>
+                                    </select>
+                                    <button v-else class="rounded-md border border-purple-300/15 bg-purple-400/10 px-2 py-1 text-[10px] text-purple-200 transition hover:bg-purple-400/20" @click="changeStatus(task, 'todo')">بازگردانی</button>
+                                </div>
+                            </article>
+                            <div v-if="!pending && tasksFor(column.id).length === 0" class="flex min-h-40 flex-col items-center justify-center text-center text-slate-500">
+                                <span class="text-xl text-slate-400">{{ column.icon }}</span>
+                                <p class="mt-2 text-xs">{{ column.id === 'todo' ? 'فعلاً کاری در صف نیست' : column.id === 'in_progress' ? 'هنوز کاری شروع نشده' : 'اولین کارت موفقیتت اینجا میاد' }}</p>
+                                <button v-if="column.id === 'todo' && allReminders.length === 0" class="mt-3 text-xs text-blue-200 transition hover:text-purple-200" @click="openCreate">اولین یادآور رو بساز <span class="text-sm">←</span></button>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <footer class="my-8 flex items-center justify-center gap-2 text-center text-xs text-slate-500"><span class="text-violet-300">✳</span> با تمرکز روی کار بعدی، به هرچیزی می‌رسی.</footer>
+        </div>
+
+        <Transition
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="scale-95 opacity-0"
+            enter-to-class="scale-100 opacity-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="scale-100 opacity-100"
+            leave-to-class="scale-95 opacity-0"
+        >
+            <div v-if="isDialogOpen" class="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-slate-950/75 p-4 backdrop-blur-md" @click.self="isDialogOpen = false" @keydown.esc="isDialogOpen = false">
+                <section class="my-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-300/20 bg-gradient-to-br from-[#171b36]/95 via-[#17152d]/95 to-[#24142d]/95 p-5 shadow-2xl shadow-black/50 backdrop-blur-2xl sm:p-7" role="dialog" aria-modal="true" :aria-labelledby="'modal-title'">
+                    <div class="mb-5 flex items-center justify-between">
+                        <div class="grid h-10 w-10 place-items-center rounded-xl border border-violet-300/20 bg-violet-400/10 text-lg text-violet-200">✳</div>
+                        <button class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-xl leading-none text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-200" aria-label="بستن" @click="isDialogOpen = false">×</button>
+                    </div>
+                    <p class="mb-2 flex items-center gap-2 text-xs font-medium text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> {{ editingId ? 'به‌روزرسانی' : 'یک قدم تازه' }}</p>
+                    <h2 id="modal-title" class="text-2xl font-bold text-white">{{ editingId ? 'ویرایش یادآور' : 'کار بعدی چیه؟' }}</h2>
+                    <p class="mb-5 mt-2 text-xs text-slate-400">جزئیاتش رو وارد کن تا با خیال راحت بسپریش به ما.</p>
+                    <form class="grid gap-4" @submit.prevent="saveReminder">
+                        <label class="grid gap-2 text-xs text-slate-300">عنوان کار <span class="text-rose-300">*</span><input v-model="form.title" class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" required maxlength="120" placeholder="مثلاً: تماس با دکتر" autofocus></label>
+                        <label class="grid gap-2 text-xs text-slate-300">توضیحات<textarea v-model="form.description" class="w-full resize-y rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" maxlength="500" rows="3" placeholder="چیزی هست که باید یادت بمونه؟"></textarea></label>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <label class="grid gap-2 text-xs text-slate-300">زمان یادآوری <span class="text-rose-300">*</span><input v-model="form.dueAt" class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" type="datetime-local" required></label>
+                            <label class="grid gap-2 text-xs text-slate-300">وضعیت<select v-model="form.status" class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-3 text-sm text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10"><option value="todo">در انتظار</option><option value="in_progress">در حال انجام</option><option value="done">انجام شده</option></select></label>
+                        </div>
+                        <button class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:from-blue-400 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-300/60 disabled:cursor-wait disabled:opacity-60" type="submit" :disabled="saving">
+                            <span>{{ saving ? 'در حال ذخیره...' : editingId ? 'ذخیره تغییرات' : 'ساخت یادآور' }}</span><span v-if="!saving">←</span>
+                        </button>
+                    </form>
+                </section>
+            </div>
+        </Transition>
+    </main>
 </template>

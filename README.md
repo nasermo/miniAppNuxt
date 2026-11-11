@@ -1,75 +1,29 @@
-# Nuxt Minimal Starter
+# یادنو
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+یادنو یک اپلیکیشن یادآور فارسی و راست‌چین با طراحی واکنش‌گرا برای موبایل و Telegram Mini Apps است. کارها در سه وضعیت «باید انجام بشه»، «در حال انجام» و «انجام شده» دسته‌بندی می‌شوند؛ برای هر کار می‌توان عنوان، توضیحات، زمان و وضعیت ثبت کرد. زمان باقی‌مانده یا تأخیر هم کنار هر یادآور نمایش داده می‌شود.
 
-## Setup
-
-Make sure to install dependencies:
+## اجرا در محیط توسعه
 
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
 npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+در توسعه، داده‌ها در دیتابیس SQLite محلی ذخیره می‌شوند. جدول یادآورها با اولین درخواست API به‌صورت خودکار ساخته می‌شود.
 
-Build the application for production:
+## استقرار
 
-```bash
-# npm
-npm run build
+تنظیمات فعلی برای محیط توسعه از SQLite و در محیط production از Cloudflare D1 استفاده می‌کند. در Cloudflare، یک D1 Database با binding به نام `db_link` تعریف کنید؛ جدول نیز هنگام اولین درخواست ساخته می‌شود.
 
-# pnpm
-pnpm build
+## API
 
-# yarn
-yarn build
+- `GET /api/tasks` — دریافت یادآورها
+- `POST /api/tasks` — ساخت یادآور
+- `PUT /api/tasks/:id` — ویرایش یا تغییر وضعیت
+- `DELETE /api/tasks/:id` — حذف یادآور
 
-# bun
-bun run build
-```
+وضعیت‌ها: `todo`، `in_progress` و `done`.
 
-Locally preview production build:
+## قبل از انتشار چندکاربره
 
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+این نسخه هنوز اعتبارسنجی `initData` تلگرام و جداسازی یادآورها بر اساس کاربر را پیاده‌سازی نکرده است؛ بنابراین برای داده‌های واقعی یا انتشار عمومی چندکاربره آماده نیست. این بخش باید پیش از اتصال کاربران واقعی تکمیل شود.
