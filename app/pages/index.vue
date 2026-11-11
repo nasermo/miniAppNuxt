@@ -196,12 +196,12 @@ async function removeReminder(task: Reminder) {
 </script>
 
 <template>
-    <main class="relative h-[100dvh] overflow-hidden bg-gradient-to-br from-slate-950 via-[#10142b] to-[#1b1028] text-slate-100" dir="rtl">
+    <main class="relative min-h-[100dvh] overflow-x-hidden overflow-y-auto bg-gradient-to-br from-slate-950 via-[#10142b] to-[#1b1028] text-slate-100" dir="rtl">
         <div class="pointer-events-none absolute -left-40 top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-[120px]" />
         <div class="pointer-events-none absolute -right-32 top-1/2 h-96 w-96 rounded-full bg-purple-600/20 blur-[130px]" />
         <div class="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-rose-600/10 blur-[120px]" />
 
-        <div class="relative mx-auto flex h-full w-[calc(100%-2rem)] max-w-6xl flex-col overflow-hidden pt-[env(safe-area-inset-top)] sm:w-[calc(100%-3rem)]">
+        <div class="relative mx-auto flex min-h-[100dvh] w-[calc(100%-2rem)] max-w-6xl flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:w-[calc(100%-3rem)]">
             <header class="flex h-14 shrink-0 items-center justify-between border-b border-white/10 sm:h-16">
                 <a class="flex items-center gap-3 text-white" href="/" aria-label="خانه یادآور">
                     <span class="grid h-10 w-10 rotate-[-8deg] place-items-center rounded-xl border border-blue-300/30 bg-gradient-to-br from-blue-400/20 to-purple-500/20 shadow-lg shadow-blue-950/30">
@@ -220,8 +220,8 @@ async function removeReminder(task: Reminder) {
                 <button class="rounded-xl px-4 py-2 text-xs font-medium transition sm:text-sm" :class="activeTab === 'tasks' ? 'bg-violet-400/15 text-violet-100' : 'text-slate-400 hover:bg-white/5 hover:text-white'" :aria-current="activeTab === 'tasks' ? 'page' : undefined" @click="activeTab = 'tasks'">مدیریت زمان <span class="mr-1 text-[10px] text-slate-400">{{ allReminders.length.toLocaleString('fa-IR') }}</span></button>
             </nav>
 
-            <div class="min-h-0 flex-1 overflow-hidden">
-            <section v-if="activeTab === 'overview'" class="flex h-full flex-col overflow-hidden py-5 sm:py-7">
+            <div class="flex-1">
+            <section v-if="activeTab === 'overview'" class="flex flex-col py-5 sm:py-7">
             <div class="flex flex-col items-start justify-between gap-4 pb-5 sm:flex-row sm:items-end sm:pb-7">
                 <div>
                     <p class="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-blue-200"><span class="h-px w-6 bg-gradient-to-l from-blue-400 to-purple-400" /> پنل یادآوری هوشمند</p>
@@ -266,7 +266,7 @@ async function removeReminder(task: Reminder) {
             <footer class="mt-auto pt-5 text-center text-[10px] text-slate-500"><span class="text-violet-300">✳</span> با تمرکز روی کار بعدی، به هرچیزی می‌رسی.</footer>
             </section>
 
-            <section v-else class="flex h-full min-h-0 flex-col py-3 sm:py-5">
+            <section v-else class="flex flex-col py-3 sm:py-5">
                 <div class="mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
                     <div>
                         <p class="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> مدیریت زمان</p>
@@ -285,9 +285,9 @@ async function removeReminder(task: Reminder) {
                     <span>{{ notice || requestAlert('دریافت یادآورها با خطا روبه‌رو شد.', error) }}</span>
                 </div>
 
-                <div class="flex min-h-0 flex-1 flex-col">
-                <div ref="taskSlider" class="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:overflow-hidden" aria-label="دسته‌بندی یادآورها" @scroll.passive="updateActiveSlide">
-                    <article v-for="column in columns" :key="column.id" class="flex h-full w-full shrink-0 snap-center flex-col overflow-hidden rounded-2xl border p-3 backdrop-blur-xl md:w-auto" :class="column.id === 'todo' ? 'border-blue-300/15 bg-blue-400/[0.035]' : column.id === 'in_progress' ? 'border-purple-300/15 bg-purple-400/[0.035]' : 'border-rose-300/15 bg-rose-400/[0.035]'">
+                <div class="flex flex-col">
+                <div ref="taskSlider" class="flex snap-x snap-mandatory touch-pan-y gap-3 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:overflow-visible" aria-label="دسته‌بندی یادآورها" @scroll.passive="updateActiveSlide">
+                    <article v-for="column in columns" :key="column.id" class="flex w-full shrink-0 snap-center flex-col rounded-2xl border p-3 backdrop-blur-xl md:w-auto" :class="column.id === 'todo' ? 'border-blue-300/15 bg-blue-400/[0.035]' : column.id === 'in_progress' ? 'border-purple-300/15 bg-purple-400/[0.035]' : 'border-rose-300/15 bg-rose-400/[0.035]'">
                         <header class="flex items-center justify-between border-b border-white/[0.08] px-1 pb-3">
                             <div class="flex items-center gap-2">
                                 <span class="text-base text-violet-300">{{ column.icon }}</span>
@@ -296,7 +296,7 @@ async function removeReminder(task: Reminder) {
                             </div>
                             <span class="font-sans text-[9px] tracking-widest text-slate-500">{{ column.english }}</span>
                         </header>
-                        <div class="grid min-h-0 flex-1 content-start gap-2.5 overflow-y-auto overscroll-contain pt-3">
+                        <div class="grid content-start gap-2.5 pt-3">
                             <div v-if="pending" class="rounded-xl border border-white/10 bg-white/[0.04] p-5 text-center text-xs text-slate-400">در حال دریافت کارها...</div>
                             <article v-for="task in tasksFor(column.id)" :key="task.id" class="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.025] p-3.5 shadow-lg shadow-slate-950/10 transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/25 hover:shadow-violet-950/20">
                                 <div class="flex items-center justify-between">

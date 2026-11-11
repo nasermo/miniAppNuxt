@@ -1,5 +1,5 @@
 {
-  "name": "yadno-reminders",
+  "name": "miniappnuxt",
   "compatibility_date": "2025-07-15",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [

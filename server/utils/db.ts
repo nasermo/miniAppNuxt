@@ -20,6 +20,25 @@ export async function ensureTasksTable() {
     `)
 }
 
+export function handleTaskApiError(operation: string, error: unknown): never {
+    if (
+        error &&
+        typeof error === 'object' &&
+        'statusCode' in error &&
+        typeof error.statusCode === 'number' &&
+        error.statusCode < 500
+    ) {
+        throw error
+    }
+
+    console.error(`[api/tasks] ${operation} failed`, error)
+    throw createError({
+        statusCode: 500,
+        statusMessage: 'Database request failed. Check Cloudflare Worker logs for details.',
+        cause: error,
+    })
+}
+
 export type ReminderStatus = 'todo' | 'in_progress' | 'done'
 
 export interface ReminderInput {
