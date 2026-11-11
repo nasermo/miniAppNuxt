@@ -95,6 +95,15 @@ function goToSlide(index: number) {
     })
 }
 
+function setActiveFilter(filter: TaskStatus | 'all') {
+    activeFilter.value = filter
+
+    if (filter !== 'all' && window.matchMedia('(max-width: 767px)').matches) {
+        const index = columns.findIndex((column) => column.id === filter)
+        if (index !== -1) goToSlide(index)
+    }
+}
+
 function tasksFor(status: TaskStatus) {
     return allReminders.value
         .filter((task) => task.status === status && (activeFilter.value === 'all' || activeFilter.value === status))
@@ -273,10 +282,10 @@ async function removeReminder(task: Reminder) {
                         <h2 class="text-xl font-bold text-white sm:text-2xl">تابلوی کارها <span class="mr-1 rounded-lg border border-violet-300/15 bg-violet-400/10 px-2 py-1 align-middle text-xs text-violet-200">{{ allReminders.length.toLocaleString('fa-IR') }}</span></h2>
                     </div>
                     <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.04] p-1 backdrop-blur-lg" aria-label="فیلتر کارها">
-                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'all' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'all'">همه</button>
-                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'todo' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'todo'">در انتظار</button>
-                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'in_progress' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'in_progress'">در حال انجام</button>
-                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'done' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="activeFilter = 'done'">انجام شده</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'all' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="setActiveFilter('all')">همه</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'todo' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="setActiveFilter('todo')">در انتظار</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'in_progress' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="setActiveFilter('in_progress')">در حال انجام</button>
+                        <button class="whitespace-nowrap rounded-lg px-3 py-2 text-xs transition" :class="activeFilter === 'done' ? 'bg-blue-400/15 text-blue-100 shadow-inner shadow-blue-300/10' : 'text-slate-400 hover:text-white'" @click="setActiveFilter('done')">انجام شده</button>
                     </div>
                 </div>
 
