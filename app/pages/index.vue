@@ -48,6 +48,30 @@ const activeCount = computed(() => allReminders.value.filter((task) => task.stat
 const dueSoonCount = computed(() => allReminders.value.filter((task) => task.status !== 'done' && new Date(task.due_at).getTime() >= currentTime.value && new Date(task.due_at).getTime() <= currentTime.value + 24 * 60 * 60 * 1000).length)
 const progress = computed(() => allReminders.value.length ? Math.round((completedCount.value / allReminders.value.length) * 100) : 0)
 
+function getRequestErrorDetails(error: unknown) {
+    if (!error || typeof error !== 'object') return ''
+
+    const requestError = error as {
+        data?: { statusMessage?: unknown; message?: unknown }
+        statusCode?: unknown
+        statusMessage?: unknown
+        message?: unknown
+    }
+    const message = requestError.data?.statusMessage
+        ?? requestError.data?.message
+        ?? requestError.statusMessage
+        ?? requestError.message
+    const status = typeof requestError.statusCode === 'number' ? `HTTP ${requestError.statusCode}` : ''
+
+    if (typeof message !== 'string' || !message.trim()) return status
+    return status ? `${status}: ${message}` : message
+}
+
+function requestAlert(fallback: string, error: unknown) {
+    const details = getRequestErrorDetails(error)
+    return details ? `${fallback} (${details})` : fallback
+}
+
 function updateActiveSlide() {
     const slider = taskSlider.value
     if (!slider) return
@@ -138,8 +162,8 @@ async function saveReminder() {
         })
         isDialogOpen.value = false
         await refresh()
-    } catch {
-        notice.value = 'ذخیره یادآور انجام نشد. دوباره تلاش کن.'
+    } catch (requestError) {
+        notice.value = requestAlert('ذخیره یادآور انجام نشد. دوباره تلاش کن.', requestError)
     } finally {
         saving.value = false
     }
@@ -152,8 +176,8 @@ async function changeStatus(task: Reminder, status: TaskStatus) {
             body: { title: task.title, description: task.description, dueAt: task.due_at, status },
         })
         await refresh()
-    } catch {
-        notice.value = 'تغییر وضعیت ذخیره نشد. دوباره تلاش کن.'
+    } catch (requestError) {
+        notice.value = requestAlert('تغییر وضعیت ذخیره نشد. دوباره تلاش کن.', requestError)
     }
 }
 
@@ -163,8 +187,8 @@ async function removeReminder(task: Reminder) {
     try {
         await $fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
         await refresh()
-    } catch {
-        notice.value = 'حذف یادآور انجام نشد. دوباره تلاش کن.'
+    } catch (requestError) {
+        notice.value = requestAlert('حذف یادآور انجام نشد. دوباره تلاش کن.', requestError)
     } finally {
         deletingId.value = null
     }
@@ -231,7 +255,10 @@ async function removeReminder(task: Reminder) {
                 </article>
             </section>
 
-            <div v-if="notice || error" class="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-xs text-rose-200" role="alert">{{ notice || 'دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.' }}</div>
+            <div v-if="notice || error" class="mt-4 flex shrink-0 items-start gap-2 rounded-xl border border-rose-300/25 bg-rose-500/10 px-3 py-2.5 text-xs leading-relaxed text-rose-200" role="alert">
+                <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-rose-400/15 font-bold text-rose-200" aria-hidden="true">!</span>
+                <span>{{ notice || requestAlert('دریافت یادآورها با خطا روبه‌رو شد.', error) }}</span>
+            </div>
             <button class="mt-5 flex w-full items-center justify-between rounded-2xl border border-violet-300/15 bg-violet-400/[0.06] p-4 text-right transition hover:border-violet-300/30 hover:bg-violet-400/10" @click="activeTab = 'tasks'">
                 <span><span class="block text-sm font-semibold text-slate-100">تابلوی کارها</span><span class="mt-1 block text-xs text-slate-400">یادآورها را بر اساس وضعیت مدیریت کن</span></span>
                 <span class="text-lg text-violet-200">←</span>
@@ -253,7 +280,10 @@ async function removeReminder(task: Reminder) {
                     </div>
                 </div>
 
-                <p v-if="notice || error" class="mb-3 shrink-0 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-2 text-xs text-rose-200" role="alert">{{ notice || 'دریافت یادآورها با خطا روبه‌رو شد. صفحه را دوباره بارگذاری کن.' }}</p>
+                <div v-if="notice || error" class="mb-3 flex shrink-0 items-start gap-2 rounded-xl border border-rose-300/25 bg-rose-500/10 px-3 py-2 text-xs leading-relaxed text-rose-200" role="alert">
+                    <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-rose-400/15 font-bold text-rose-200" aria-hidden="true">!</span>
+                    <span>{{ notice || requestAlert('دریافت یادآورها با خطا روبه‌رو شد.', error) }}</span>
+                </div>
 
                 <div class="flex min-h-0 flex-1 flex-col">
                 <div ref="taskSlider" class="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:overflow-hidden" aria-label="دسته‌بندی یادآورها" @scroll.passive="updateActiveSlide">
@@ -318,20 +348,20 @@ async function removeReminder(task: Reminder) {
             leave-to-class="scale-95 opacity-0"
         >
             <div v-if="isDialogOpen" class="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-slate-950/75 p-4 backdrop-blur-md" @click.self="isDialogOpen = false" @keydown.esc="isDialogOpen = false">
-                <section class="my-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-300/20 bg-gradient-to-br from-[#171b36]/95 via-[#17152d]/95 to-[#24142d]/95 p-5 shadow-2xl shadow-black/50 backdrop-blur-2xl sm:p-7" role="dialog" aria-modal="true" :aria-labelledby="'modal-title'">
-                    <div class="mb-5 flex items-center justify-between">
-                        <div class="grid h-10 w-10 place-items-center rounded-xl border border-violet-300/20 bg-violet-400/10 text-lg text-violet-200">✳</div>
+                <section class="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-300/20 bg-gradient-to-br from-[#171b36]/95 via-[#17152d]/95 to-[#24142d]/95 p-4 shadow-2xl shadow-black/50 backdrop-blur-2xl sm:p-6" role="dialog" aria-modal="true" :aria-labelledby="'modal-title'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <div class="grid h-9 w-9 place-items-center rounded-xl border border-violet-300/20 bg-violet-400/10 text-base text-violet-200">✳</div>
                         <button class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-xl leading-none text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-200" aria-label="بستن" @click="isDialogOpen = false">×</button>
                     </div>
-                    <p class="mb-2 flex items-center gap-2 text-xs font-medium text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> {{ editingId ? 'به‌روزرسانی' : 'یک قدم تازه' }}</p>
-                    <h2 id="modal-title" class="text-2xl font-bold text-white">{{ editingId ? 'ویرایش یادآور' : 'کار بعدی چیه؟' }}</h2>
-                    <p class="mb-5 mt-2 text-xs text-slate-400">جزئیاتش رو وارد کن تا با خیال راحت بسپریش به ما.</p>
-                    <form class="grid gap-4" @submit.prevent="saveReminder">
-                        <label class="grid gap-2 text-xs text-slate-300">عنوان کار <span class="text-rose-300">*</span><input v-model="form.title" class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" required maxlength="120" placeholder="مثلاً: تماس با دکتر" autofocus></label>
-                        <label class="grid gap-2 text-xs text-slate-300">توضیحات<textarea v-model="form.description" class="w-full resize-y rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" maxlength="500" rows="3" placeholder="چیزی هست که باید یادت بمونه؟"></textarea></label>
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <label class="grid gap-2 text-xs text-slate-300">زمان یادآوری <span class="text-rose-300">*</span><input v-model="form.dueAt" class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" type="datetime-local" required></label>
-                            <label class="grid gap-2 text-xs text-slate-300">وضعیت<select v-model="form.status" class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-3 text-sm text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10"><option value="todo">در انتظار</option><option value="in_progress">در حال انجام</option><option value="done">انجام شده</option></select></label>
+                    <p class="mb-1.5 flex items-center gap-2 text-[11px] font-medium text-violet-200"><span class="h-px w-6 bg-gradient-to-l from-purple-400 to-rose-400" /> {{ editingId ? 'به‌روزرسانی' : 'یک قدم تازه' }}</p>
+                    <h2 id="modal-title" class="text-xl font-bold text-white">{{ editingId ? 'ویرایش یادآور' : 'کار بعدی چیه؟' }}</h2>
+                    <p class="mb-3 mt-1 text-[11px] text-slate-400">جزئیاتش رو وارد کن تا با خیال راحت بسپریش به ما.</p>
+                    <form class="grid gap-3" @submit.prevent="saveReminder">
+                        <label class="grid min-w-0 gap-1.5 text-xs text-slate-300"><span>عنوان کار <span class="text-rose-300">*</span></span><input v-model="form.title" class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" required maxlength="120" placeholder="مثلاً: تماس با دکتر" autofocus></label>
+                        <label class="grid min-w-0 gap-1.5 text-xs text-slate-300"><span>توضیحات</span><textarea v-model="form.description" class="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10" maxlength="500" rows="2" placeholder="چیزی هست که باید یادت بمونه؟"></textarea></label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <label class="grid min-w-0 gap-1.5 text-[11px] text-slate-300"><span>زمان یادآوری <span class="text-rose-300">*</span></span><input v-model="form.dueAt" class="min-w-0 w-full rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2.5 text-[11px] text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10 sm:px-3 sm:text-sm" type="datetime-local" required></label>
+                            <label class="grid min-w-0 gap-1.5 text-[11px] text-slate-300"><span>وضعیت</span><select v-model="form.status" class="min-w-0 w-full rounded-xl border border-white/10 bg-slate-900/80 px-2 py-2.5 text-xs text-white outline-none transition focus:border-violet-300/50 focus:ring-2 focus:ring-violet-400/10"><option value="todo">در انتظار</option><option value="in_progress">در حال انجام</option><option value="done">انجام شده</option></select></label>
                         </div>
                         <button class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:from-blue-400 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-300/60 disabled:cursor-wait disabled:opacity-60" type="submit" :disabled="saving">
                             <span>{{ saving ? 'در حال ذخیره...' : editingId ? 'ذخیره تغییرات' : 'ساخت یادآور' }}</span><span v-if="!saving">←</span>
