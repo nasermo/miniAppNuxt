@@ -1,4 +1,6 @@
-
 <template>
-  <NuxtPage />
+  <div>
+    <AmbientBackground />
+    <NuxtPage />
+  </div>
 </template>

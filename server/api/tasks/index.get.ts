@@ -1,13 +1,15 @@
-import { ensureTasksTable, handleTaskApiError, myDB, serializeReminder } from '../../utils/db'
+import { ensureSchema, handleTaskApiError, myDB, serializeReminder } from '../../utils/db'
+import { requireUser } from '../../utils/telegram'
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+    const user = await requireUser(event)
     try {
-        await ensureTasksTable()
-        const rows = await myDB().prepare(
-            'SELECT id, title, description, due_at, status FROM reminders ORDER BY due_at ASC',
-        ).all()
+        await ensureSchema()
+        const rows = await myDB()
+            .prepare('SELECT id, title, description, due_at, status FROM reminders WHERE user_id = ? ORDER BY due_at ASC')
+            .all(user.id)
 
-        return rows.map(serializeReminder)
+        return (rows as unknown[]).map(serializeReminder)
     } catch (error) {
         handleTaskApiError('Read reminders', error)
     }

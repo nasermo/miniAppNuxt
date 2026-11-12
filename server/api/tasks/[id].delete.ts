@@ -1,17 +1,18 @@
-import { ensureTasksTable, getReminderId, handleTaskApiError, myDB } from '../../utils/db'
+import { ensureSchema, fail, getReminderId, handleTaskApiError, myDB } from '../../utils/db'
+import { requireUser } from '../../utils/telegram'
 
 export default defineEventHandler(async (event) => {
+    const user = await requireUser(event)
     const id = getReminderId(event)
+
     try {
-        await ensureTasksTable()
+        await ensureSchema()
+        const db = myDB()
 
-        const database = myDB()
-        const existing = await database.prepare('SELECT id FROM reminders WHERE id = ?').get(id)
-        if (!existing) {
-            throw createError({ statusCode: 404, statusMessage: 'Reminder not found' })
-        }
+        const existing = await db.prepare('SELECT id FROM reminders WHERE id = ? AND user_id = ?').get(id, user.id)
+        if (!existing) throw fail(404, 'Reminder not found', 'این یادآور پیدا نشد.')
 
-        await database.prepare('DELETE FROM reminders WHERE id = ?').run(id)
+        await db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?').run(id, user.id)
         setResponseStatus(event, 204)
         return null
     } catch (error) {
